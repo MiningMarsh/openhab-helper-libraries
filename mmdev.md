@@ -154,6 +154,10 @@ OpenHAB Types are directly translated to corresponding python types:
     - `Group` values use the `set` type.
     - `Undefined` openhab values translate to `None`, and vice versa.
 
+Numeric values can have a dimension added with the `dimension` parameter in the property constructor. An example dimension would be 'Temperature'.
+
+A unit can be assigned to a numeric type with the `unit` parameter in the property constructor. When a value is assigned, the corresponding QuanityType is sent instead.
+
 The value of a property can be retrieved by inspecting it's `.value` attribute. No caching is performed; every access will re-query openhab for the value and re-translate it.
 
 ### Property Mutation

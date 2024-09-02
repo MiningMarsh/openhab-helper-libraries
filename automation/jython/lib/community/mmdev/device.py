@@ -9,6 +9,7 @@ from inspect import getmodule
 from core.exceptions import suppress
 import community.mmdev.devices
 import re
+from uuid import uuid4
 
 
 _RE_CAMEL = re.compile('^(.*[a-z])([A-Z].*)$')
@@ -128,7 +129,11 @@ class Device(object):
         )
 
 
-def as_device(collection=None, name=None):
+def as_device(collection=None, name=None, ephemeral=False):
+    if ephemeral:
+        collection = str(uuid4().hex)
+        name = str(uuid4().hex)
+
     def decorator(function):
         device_collection, device_name = details(function)
         if collection is not None:
