@@ -4,18 +4,13 @@
 /automation/jsr223/python/personal/**
 /automation/jsr223/javascript/personal/**
 /automation/jsr223/groovy/personal/**
-/automation/lib/python/personal/**
-/automation/lib/javascript/personal/**
-/automation/lib/groovy/personal/**
-/automation/lib/python/configuration.py
+/automation/jython/lib/personal/**
 /automation/js/**
 /js/**
 !/automation/jsr223/python/personal/.gitkeep
 !/automation/jsr223/javascript/personal/.gitkeep
 !/automation/jsr223/groovy/personal/.gitkeep
-!/automation/lib/python/personal/.gitkeep
-!/automation/lib/javascript/personal/.gitkeep
-!/automation/lib/groovy/personal/.gitkeep
+!/automation/jython/lib/personal/.gitkeep
 
 # VSCode settings
 .vscode/
@@ -41,3 +36,4 @@
 /things/**
 /influxdb.persist
 /cont-init.d/**
+/config/**

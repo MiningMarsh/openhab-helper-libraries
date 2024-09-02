@@ -8,6 +8,20 @@ LOG = LoggerFactory.getLogger("jython.startup")
 
 from java.lang import System
 import sys
+import os
+
+base = None
+for index, entry in enumerate(sys.path):
+    if 'automation/' in entry:
+        base = entry.split('automation/')[0]
+        break
+
+for p in {'jython/lib', 'lib/jython', 'python/lib', 'lib/python'}:
+    full = '{}automation/{}'.format(base, p)
+    if full not in sys.path and os.path.exists(full):
+        sys.path.insert(index, full)
+    elif full in sys.path and not os.path.exists(full):
+        sys.path = [p for p in sys.path if p != full]
 
 try:
     import configuration
