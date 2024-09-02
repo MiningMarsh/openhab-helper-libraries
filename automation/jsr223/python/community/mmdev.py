@@ -19,6 +19,9 @@ def item_reaper():
         return
     for item in all_items():
         if item != 'MMDEV_BOOT':
+            if not item.startswith('MMDEV_'):
+                continue
+
             metadata = get_metadata(item, 'mmdev')
             try:
                 valid = (
