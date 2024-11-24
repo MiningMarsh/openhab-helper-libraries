@@ -54,7 +54,7 @@ def translate_camel(name):
 
 
 class Device(object):
-    def __init__(self, room_name, device_class, device_name, rule_engine, logger=log.LOGGER):
+    def __init__(self, room_name, device_class, device_name, rule_engine, item_base=None, logger=log.LOGGER):
         device_collection, class_name = details(device_class)
         self.class_name = class_name
         self.logger = logger
@@ -63,6 +63,7 @@ class Device(object):
         self.device_name = device_name
         self.rule_engine = rule_engine
         self.__items = set()
+        self.__item_base = item_base
         self.__properties = {}
 
     @property
@@ -75,19 +76,14 @@ class Device(object):
 
     @property
     def item_base(self):
-        if self.device_collection == 'Builtin':
-            return 'MMDEV_%s_%s_%s' % (
-                self.class_name,
-                self.room_name.replace(' ', ''),
-                self.device_name.replace(' ', '')
-            )
-        else:
-            return 'MMDEV_%s_%s_%s_%s' % (
-                self.device_collection,
-                self.class_name,
-                self.room_name.replace(' ', ''),
-                self.device_name
-            )
+        if self.__item_base is not None:
+            return self.__item_base
+        return 'MMDEV_%s_%s_%s_%s' % (
+            self.device_collection,
+            self.class_name,
+            self.room_name.replace(' ', '') if self.room_name is not None else '',
+            self.device_name.replace(' ', '')
+        )
 
     def property_item(self, property_name):
         return '%s_%s' % (
@@ -131,10 +127,13 @@ class Device(object):
 # For some reason, if I dont wrap this inbthis eztra class, the d3vice object is gettibg reused.
 class DeviceAttribWrapper(object):
 
-    def __init__(self, attribs):
+    def __init__(self, device, attribs):
+        self.__device = device
         self.__attribs = {}
         for attrib, value in attribs.items():
             self.__attribs[attrib] = value
+
+        self.__attribs['device'] = device
 
     def __getattr__(self, name):
         if self.__attribs is not None:
@@ -155,23 +154,20 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
 
         class DeviceManagerWrapper(object):
             
-            def __init__(self, manager):
+            def __init__(self, device, manager):
                 self.__manager = manager
-                self.__item_prefix = "%s_%s" % (
-                    device_collection if device_collection is not None else '',
-                    device_name if device_name is not None else '',
-                )
+                self.__parent = device
 
             def device_for(self, *args, **kwargs):
-                kwargs['item_prefix'] = self.__item_prefix
+                kwargs['parent'] = self.__parent
                 return self.__manager.device_for(*args, **kwargs)
 
             def state_for(self, *args, **kwargs):
-                kwargs['item_prefix'] = self.__item_prefix
+                kwargs['parent'] = self.__parent
                 return self.__manager.state_for(*args, **kwargs)
 
             def group_for(self, *args, **kwargs):
-                kwargs['item_prefix'] = self.__item_prefix
+                kwargs['parent'] = self.__parent
                 return self.__manager.group_for(*args, **kwargs)
 
             def ephemeral_for(self, *args, **kwargs):
@@ -212,24 +208,23 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
 
 
                 attribs = {}
+                exposed = set()
                 wrapper = DevicePropertyWrapper(device, params)
                 if manager is True:
-                    kwargs['manager'] = DeviceManagerWrapper(kwargs['manager'])
+                    kwargs['manager'] = DeviceManagerWrapper(device, kwargs['manager'])
                 for attrib in self.__function(wrapper, **kwargs):
-                    attribs[translate_camel(attrib.property_name)] = attrib
+                    if not isinstance(attrib, prop.Prop):
+                        attribs[translate_camel(attrib.device.device_name)] = attrib
+                    else:
+                        name = translate_camel(attrib.property_name)
+                        attribs[name] = attrib
+                        exposed.add(name)
                 for section, names in params.items():
                     for name in names:
-                        if name not in attribs:
+                        if name not in exposed:
                             raise Exception('Tried to overload private or non-existant property `%s` on device `%s` with attribute `%s_%s`!' % (name, device_name, name, section))
 
-                #self.__attribs = attribs
-                return DeviceAttribWrapper(attribs)
-
-            #def __getattr__(self, name):
-            #    if self.__attribs is not None:
-            #        if name in self.__attribs:
-            #            return self.__attribs[name]
-            #    raise AttributeError
+                return DeviceAttribWrapper(device, attribs)
 
 
         class DevicePropertyWrapper(object):

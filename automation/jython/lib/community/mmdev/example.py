@@ -479,3 +479,16 @@ def update_thermostat_fan_mode():
 
 
 update_thermostat_fan_mode()
+
+
+@as_device(manager=True)
+def TestDevice(device, manager):
+    test2 = device.property(int, 'TestProperty', default=0)
+    test = manager.device_for(Light, device_name='TestLight')
+    return {
+        test
+    }
+
+
+tester = m.device_for(TestDevice, 'Test Room', 'Tester', manager=m)
+LOGGER.error('Tester.test -> %s' % str(tester.test_light))

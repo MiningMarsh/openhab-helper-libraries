@@ -45,7 +45,7 @@ class Manager(object):
             )
 
     @log_traceback
-    def device_for(self, device_class, room_name=None, device_name=None, item_prefix='MMDEV', **kwargs):
+    def device_for(self, device_class, room_name=None, device_name=None, parent=None, **kwargs):
         if device_name is None:
             device_name = uuid4().hex
 
@@ -53,13 +53,17 @@ class Manager(object):
             room_name = uuid4().hex
 
         device_collection, class_name = details(device_class)
-        full_name = '%s_%s_%s_%s_%s' % (
-            item_prefix,
-            device_collection if device_collection != 'Builtin' else '',
-            class_name,
-            room_name.replace(' ', '') if room_name is not None else '',
-            device_name.replace(' ', '')
-        )
+        if parent is None:
+            full_name = 'MMDEV_%s_%s_%s_%s' % (
+                device_collection, class_name,
+                room_name.replace(' ', '') if room_name is not None else '',
+                device_name.replace(' ', '')
+            )
+        else:
+            full_name = '%s_%s_%s_%s' % (
+                parent.item_base, device_collection, class_name,
+                device_name.replace(' ', '')
+            )
 
         if full_name in self.__cached_devices:
             return self.__cached_devices[full_name]
@@ -69,15 +73,17 @@ class Manager(object):
             device_name=device_name,
             room_name=room_name,
             rule_engine=self.__rule_engine,
+            item_base=full_name,
             logger=self.__logger
         )
+
         cached_device = device_class(device=d, **kwargs)
         self.__cached_devices[full_name] = cached_device
         return cached_device
 
     @log_traceback
-    def state_for(self, state_type, state_name, item_prefix='MMDEV', **kwargs):
-        full_name = '%s_State_%s' % (item_prefix, state_name)
+    def state_for(self, state_type, state_name, parent=None, **kwargs):
+        full_name = '%s_State_%s' % (parent.item_base if parent else 'MMDEV', state_name)
         if full_name in self.__cached_states:
             return self.__cached_states[full_name]
 
@@ -94,8 +100,8 @@ class Manager(object):
         return cached
 
     @log_traceback
-    def group_for(self, group_name, metadata=None, logger=None, item_prefix='MMDEV'):
-        group_item = '%s_Group_%s' % (item_prefix, group_name)
+    def group_for(self, group_name, metadata=None, logger=None, parent=None):
+        group_item = '%s_Group_%s' % (parent.item_base if parent else 'MMDEV', group_name)
         if group_item in self.__cached_groups:
             return self.__cached_groups[group_item]
         if logger is None:
