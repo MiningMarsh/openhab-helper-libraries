@@ -5,13 +5,13 @@ from .. import device
 def Purifier(device):
 
     tvoc = device.property(int, 'TVOC', default=0)
-    automatic_mode = device.property(bool, 'AutomaticMode', default=0)
-    automatic_speed = device.property(bool, 'AutomaticSpeed', default=0)
+    automatic_mode = device.property(bool, 'AutomaticMode', default=True)
     pm25 = device.property(int, 'PM25', default=0)
     filter_life = device.property(float, 'FilterLife', default=1)
     sleeping = device.property(bool, 'Sleeping', default=False)
     away = device.property(bool, 'Away', default=False)
     dog_mode = device.property(bool, 'DogMode', default=False)
+    fan_mode = device.property(str, 'FanMode', default='Automatic')
 
     automatic_fan_speed = device.property(
         float, 'AutomaticFanSpeed', default=0.0
@@ -25,45 +25,53 @@ def Purifier(device):
         float, 'FanSpeed', default=0.0
     )
     
-    @automatic_mode.on_activate
-    def automatic_mode_activated():
-        automatic_speed.command = True
+    @automatic_mode.on_enable
+    def automatic_mode_enabled():
+        fan_mode.command = 'Automatic'
 
-    @fan_speed.on_command()
-    def manual_command():
-        automatic_speed.command = False
+    @controls.on_command()
+    def controls_command():
+        fan_mode.command = 'Manual'
         automatic_mode.command = False
+
+    @fan_mode.on_change(pass_context=True)
+    def fan_mode_change(_, new):
+        if new == 'automatic':
+            fan_mode.update = 'Automatic'
+        elif new == 'manual':
+            fan_mode.update = 'Manual'
 
     @tvoc.on_change()
     @pm25.on_change()
-    @automatic_speed.on_change()
     @sleeping.on_change()
     @away.on_change()
     @dog_mode.on_change()
-    @fan_speed.on_change()
     @controls.on_change()
+    @fan_mode.on_change()
     def update():
 
-        if filter_life.value < 0.15:
-            fan_speed.command = 0
-            controls.update = 0
-        
-        air_quality_perc = 1.0 - max(0.0, min(1.0, (pm25.value - 5.0) / 20.0))
-        tvoc_ppm_perc = 1.0 - max(0.0, min(1.0, tvoc.value / 12000.0))
+        air_quality_perc = max(0.0, min(1.0, (pm25.value - 5.0) / 20.0))
+        tvoc_ppm_perc = max(0.0, min(1.0, (tvoc.value - 150) / (1000.0 - 150.0)))
 
-        speed = max(0, 1.0 - min(tvoc_ppm_perc, air_quality_perc))
+        speed = max(0, tvoc_ppm_perc, air_quality_perc)
         automatic_fan_speed.command = speed
 
-        if not automatic_speed.value:
+        if filter_life.value < 0.05:
+            fan_speed.command = 0
+            controls.update = 0
+            fan_mode.command = 'Automatic'
+            return
+
+        if fan_mode.value.lower() == 'manual':
+            automatic_mode.command = False
             fan_speed.command = controls.value
             return
 
-        speed = max(0.5, speed)
         if sleeping.value:
-            speed = min(0.33, speed)
+            speed = 0.5
 
-        if away.value or dog_mode.value and device.room_name.lower().replace(' ', '_') == 'livingroom':
-            speed = 1
+        if speed < 0.05:
+            speed = 0
 
         fan_speed.command = speed
         controls.update = speed

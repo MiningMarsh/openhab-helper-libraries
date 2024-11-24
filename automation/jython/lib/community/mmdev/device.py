@@ -56,7 +56,6 @@ def translate_camel(name):
 class Device(object):
     def __init__(self, room_name, device_class, device_name, rule_engine, logger=log.LOGGER):
         device_collection, class_name = details(device_class)
-        self.device_class = device_class
         self.class_name = class_name
         self.logger = logger
         self.room_name = room_name
@@ -129,10 +128,23 @@ class Device(object):
         )
 
 
-def as_device(collection=None, name=None, ephemeral=False):
+# For some reason, if I dont wrap this inbthis eztra class, the d3vice object is gettibg reused.
+class DeviceAttribWrapper(object):
+
+    def __init__(self, attribs):
+        self.__attribs = {}
+        for attrib, value in attribs.items():
+            self.__attribs[attrib] = value
+
+    def __getattr__(self, name):
+        if self.__attribs is not None:
+            if name in self.__attribs:
+                return self.__attribs[name]
+        raise AttributeError
+
+def as_device(collection=None, name=None, ephemeral=False, manager=False):
     if ephemeral:
-        collection = str(uuid4().hex)
-        name = str(uuid4().hex)
+        collection = 'Ephemeral'
 
     def decorator(function):
         device_collection, device_name = details(function)
@@ -140,6 +152,38 @@ def as_device(collection=None, name=None, ephemeral=False):
             device_collection = collection
         if name is not None:
             device_name = name
+
+        class DeviceManagerWrapper(object):
+            
+            def __init__(self, manager):
+                self.__manager = manager
+                self.__item_prefix = "%s_%s" % (
+                    device_collection if device_collection is not None else '',
+                    device_name if device_name is not None else '',
+                )
+
+            def device_for(self, *args, **kwargs):
+                kwargs['item_prefix'] = self.__item_prefix
+                return self.__manager.device_for(*args, **kwargs)
+
+            def state_for(self, *args, **kwargs):
+                kwargs['item_prefix'] = self.__item_prefix
+                return self.__manager.state_for(*args, **kwargs)
+
+            def group_for(self, *args, **kwargs):
+                kwargs['item_prefix'] = self.__item_prefix
+                return self.__manager.group_for(*args, **kwargs)
+
+            def ephemeral_for(self, *args, **kwargs):
+                raise Exception('Cannot spawn nested ephemeral device!')
+
+            @property
+            def rule_engine(self):
+                return self.__manager.rule_engine
+
+            @property
+            def logger(self):
+                return self.__manager.logger
 
         class DeviceClassWrapper(object):
             collection=device_collection
@@ -161,26 +205,31 @@ def as_device(collection=None, name=None, ephemeral=False):
                 return m
 
             def __call__(self, device, **kwargs):
+                overrides = {'default', 'metadata', 'channel', 'proxy', 'groups', 'normalize'}
                 params = {}
-                for name in {'default', 'metadata', 'channel', 'proxy', 'groups', 'normalize'}:
+                for name in overrides:
                     params[name] = self.__params(name, kwargs)
+
+
                 attribs = {}
                 wrapper = DevicePropertyWrapper(device, params)
+                if manager is True:
+                    kwargs['manager'] = DeviceManagerWrapper(kwargs['manager'])
                 for attrib in self.__function(wrapper, **kwargs):
                     attribs[translate_camel(attrib.property_name)] = attrib
-                for section, config in params.items():
-                    if len(config) > 0:
-                        for name in sorted(config.keys()):
-                            raise TypeError('Unexpected argument: {}_{}'.format(name, section))
+                for section, names in params.items():
+                    for name in names:
+                        if name not in attribs:
+                            raise Exception('Tried to overload private or non-existant property `%s` on device `%s` with attribute `%s_%s`!' % (name, device_name, name, section))
 
-                self.__attribs = attribs
-                return self
+                #self.__attribs = attribs
+                return DeviceAttribWrapper(attribs)
 
-            def __getattr__(self, name):
-                if self.__attribs is not None:
-                    if name in self.__attribs:
-                        return self.__attribs[name]
-                raise AttributeError
+            #def __getattr__(self, name):
+            #    if self.__attribs is not None:
+            #        if name in self.__attribs:
+            #            return self.__attribs[name]
+            #    raise AttributeError
 
 
         class DevicePropertyWrapper(object):
@@ -189,13 +238,16 @@ def as_device(collection=None, name=None, ephemeral=False):
                 def __init__(self, device, params):
                     self.__device = device
                     self.__params = params
+                    self.__declared = set()
 
                 @log_traceback
                 def property(self, property_type, property_name, **kwargs):
+                    if property_name in self.__declared:
+                        raise Exception('Property `{}` declared twice!'.format(property_name))
+                    self.__declared.add(property_name)
+
                     item_name = self.__device.property_item(property_name)
                     camel_name = translate_camel(property_name)
-                    if camel_name in self.properties:
-                        raise Exception('Property {} declared twice!'.format(property_name))
                     for section, config in self.__params.items():
                         if camel_name in config:
                             if section == 'groups':

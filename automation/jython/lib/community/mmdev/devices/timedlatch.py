@@ -1,39 +1,31 @@
-import time
 from .. import device
-from .. import log
+import time
 
 
 @device.as_device()
-def TimedLatch(device):
+def TimedLatch(device, target=True, powered=True):
 
-    energized = device.property(bool, 'Energized', default=False)
-    powered = device.property(bool, 'Powered', default=False)
+    powered = device.property(bool, 'Powered', default=powered)
+    energized = device.property(bool, 'Energized', default=target)
+    last_unlatched = device.property(int, 'LastUnlatched', default=time.time())
+    timeout = device.property(int, 'Timeout', default=300)
 
-    monitor = device.property(
-        bool, 'Monitor', default=False
-    )
-    
-    timeout = device.property(
-        int, 'Timeout', default=300
-    )
+    @energized.on_change(pass_context=True)
+    def update_latch(_, new):
+        if new != target:
+            last_unlatched.command = time.time()
 
-    last_activation = device.property(
-        int, 'LastActivation', default=0
-    )
+    @device.rule_engine.every_second
+    def check_latch():
+        if not powered.value:
+            energized.command = not target
+        elif energized.value != target and timeout.value < time.time() - last_unlatched.value:
+            energized.command = target
+        else:
+            energized.command = not target
 
-    @timeout.on_change()
-    @last_activation.on_change()
-    @energized.on_change()
-    def update():
-        energized.command = time.time() - last_activation.value <= timeout.value
-
-    @monitor.on_activate
-    def monitor_activated():
-        last_activation.command = time.time()
-    
     return {
         energized,
         powered,
-        monitor,
         timeout
     }

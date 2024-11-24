@@ -104,3 +104,20 @@ def on_update(item, pass_context=False, null_context=False):
                 return function(value)
         return function
     return decorator
+
+
+def on_trigger(channel, value, pass_context=False, null_context=False):
+    def decorator(function):
+        @rule(
+            'Channel "%s" triggered %s' % (channel, value),
+            pass_context=True
+        )
+        @wraps(function)
+        def wrapper(event):
+            if not pass_context:
+                return function()
+            value = types.from_type(event.itemState)
+            if null_context or value is not None:
+                return function(value)
+        return function
+    return decorator

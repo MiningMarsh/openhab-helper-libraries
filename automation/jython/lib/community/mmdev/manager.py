@@ -17,7 +17,6 @@ class Manager(object):
                  logger=LOGGER,
                  rule_engine=None,
                  **kwargs):
-
         timestamp = time.time()
         while not exists('MMDEV_BOOT'):
             if time.time() - timestamp > 60:
@@ -33,46 +32,34 @@ class Manager(object):
         elapsed = time.time() - timestamp
         command('MMDEV_BOOT', elapsed, force=True)
 
-        self.__logger = logger
-        self.__extra_kwargs = kwargs
         self.__cached_devices = {}
-        self.__cached_states = {}
         self.__cached_groups = {}
-
+        self.__cached_states = {}
+        self.__extra_kwargs = kwargs
+        self.__logger = logger
         self.__rule_engine = rule_engine
+
         if self.__rule_engine is None:
             self.__rule_engine = RuleEngine(
                 logger=logger
             )
 
     @log_traceback
-    def device_for(self, device_class, **kwargs):
-        if 'device_name' in kwargs:
-            device_name = kwargs['device_name']
-            del kwargs['device_name']
-        else:
+    def device_for(self, device_class, room_name=None, device_name=None, item_prefix='MMDEV', **kwargs):
+        if device_name is None:
             device_name = uuid4().hex
 
-        if 'room_name' in kwargs:
-            room_name = kwargs['room_name']
-            del kwargs['room_name']
-        else:
+        if room_name is None:
             room_name = uuid4().hex
 
         device_collection, class_name = details(device_class)
-        if device_collection == 'Builtin':
-            full_name = 'MMDEV_%s_%s_%s' % (
-                class_name,
-                room_name.replace(' ', ''),
-                device_name.replace(' ', '')
-            )
-        else:
-            full_name = 'MMDEV_%s_%s_%s_%s' % (
-                device_collection,
-                class_name, 
-                room_name.replace(' ', ''), 
-                device_name.replace(' ', '')
-            )
+        full_name = '%s_%s_%s_%s_%s' % (
+            item_prefix,
+            device_collection if device_collection != 'Builtin' else '',
+            class_name,
+            room_name.replace(' ', '') if room_name is not None else '',
+            device_name.replace(' ', '')
+        )
 
         if full_name in self.__cached_devices:
             return self.__cached_devices[full_name]
@@ -89,9 +76,8 @@ class Manager(object):
         return cached_device
 
     @log_traceback
-    def state_for(self, state_type, state_name, **kwargs):
-
-        full_name = 'MMDEV_State_' + state_name
+    def state_for(self, state_type, state_name, item_prefix='MMDEV', **kwargs):
+        full_name = '%s_State_%s' % (item_prefix, state_name)
         if full_name in self.__cached_states:
             return self.__cached_states[full_name]
 
@@ -108,13 +94,13 @@ class Manager(object):
         return cached
 
     @log_traceback
-    def group_for(self, group_name, metadata=None, logger=None):
-        group_item = 'MMDEV_Group_' + group_name
+    def group_for(self, group_name, metadata=None, logger=None, item_prefix='MMDEV'):
+        group_item = '%s_Group_%s' % (item_prefix, group_name)
         if group_item in self.__cached_groups:
             return self.__cached_groups[group_item]
         if logger is None:
             logger=self.__logger
-        group = prop.Prop(
+        group = Prop(
             set, group_item,
             metadata=metadata,
             logger=logger,
@@ -124,11 +110,11 @@ class Manager(object):
         self.__cached_groups[group_item] = group
         return group
 
-    def ephemeral_for(self, room_name, device_name):
+    def ephemeral_for(self, device_name, room_name=None):
 
         @as_device(
             collection='Ephemeral',
-            name=str(uuid4()).upper().replace('-', '')
+            name='Ephemeral'
         )
         def Ephemeral(device):
             return {}

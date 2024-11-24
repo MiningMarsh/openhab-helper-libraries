@@ -51,12 +51,18 @@ temperature = m.state_for(
 )
 
 # Create a fan object, overriding the item for its monitor property and attaching the appropriate channel.
+# Expose the energized channel over google assistant as a fan.
 fan = m.device_for(
     device_class=Fan,
     device_name='Desk Fan',
     room_name='Study',
     energized_channel='tplinksmarthome:hs300:powerstrip_ac:outlet2#switch',
-    monitor_proxy=temperature
+    monitor_proxy=temperature,
+    energized_metadata={'ga': ('Fan', {
+        "lang": "en",
+        "roomHint" "Living Room",
+        "name": "Living Room Fan"
+    })}
 )
 
 # At this point, any time the temperature channel changes on the temperature state object, the fan device will toggle the outlet channel as needed.

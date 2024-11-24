@@ -217,6 +217,7 @@ class Prop(object):
         v = items.value(self.__item, default=self.__default)
         if v is None:
             return None
+
         if self.__normalize and self.__item_type == int:
             return max(0.0, min(100.0, v * 100.0))
         if self.__normalize and self.__item_type == float:
@@ -237,12 +238,12 @@ class Prop(object):
                 )
             elif self.__normalize and self.__item_type == int:
                 items.command(
-                    self.__item, max(0.0, min(100.0, value * 100.0)), 
+                    self.__item, max(0.0, min(1.0, value / 100.0)), 
                     force=force
                 )
             elif self.__normalize and self.__item_type == float:
                 items.command(
-                    self.__item, max(0.0, min(1.0, value / 100.0)), 
+                    self.__item, max(0.0, min(100.0, value * 100.0)), 
                     force=force
                 )
             else:
@@ -270,12 +271,12 @@ class Prop(object):
                 )
             elif self.__normalize and self.__item_type == int:
                 items.update(
-                    self.__item, max(0.0, min(100, value * 100.0)), 
+                    self.__item, max(0.0, min(1.0, value / 100.0)), 
                     force=force
                 )
             elif self.__normalize and self.__item_type == float:
                 items.update(
-                    self.__item, max(0.0, min(1.0, value / 100.0)), 
+                    self.__item, max(0.0, min(100, value * 100.0)), 
                     force=force
                 )
             else:
@@ -328,10 +329,13 @@ class Prop(object):
 
         self.__wait_for_item()
 
-        @self.on_command(pass_context=True)
+        @self.on_command(
+            pass_context=True, 
+            null_context=False
+        )
         @wraps(function)
         def wrapper(value):
-            if not value:
+            if value is False:
                 return function()
         return function
         
@@ -345,7 +349,37 @@ class Prop(object):
         )
         @wraps(function)
         def wrapper(value):
-            if value:
+            if value is True:
+                return function()
+        return function
+
+
+    def on_enable(self, function):
+        if self.__proxy is not None:
+            return self.__proxy.on_enable(function)
+
+        @self.on_change(
+            pass_context=True, 
+            null_context=False
+        )
+        @wraps(function)
+        def wrapper(_, new):
+            if new is True:
+                return function()
+        return function
+
+        
+    def on_disable(self, function):
+        if self.__proxy is not None:
+            return self.__proxy.on_disable(function)
+
+        @self.on_change(
+            pass_context=True, 
+            null_context=False
+        )
+        @wraps(function)
+        def wrapper(_, new):
+            if new is False:
                 return function()
         return function
 
