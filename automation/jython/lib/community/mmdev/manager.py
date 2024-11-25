@@ -6,7 +6,7 @@ from prop import Prop
 from core.log import log_traceback
 from ruleengine import RuleEngine
 from log import LOGGER
-from device import Device, details, as_device, translate_camel
+from device import Device, details, as_device, translate_camel, item_base
 
 import time
 from uuid import uuid4
@@ -53,17 +53,13 @@ class Manager(object):
             room_name = uuid4().hex
 
         device_collection, class_name = details(device_class)
-        if parent is None:
-            full_name = 'MMDEV_%s_%s_%s_%s' % (
-                device_collection, class_name,
-                room_name.replace(' ', '') if room_name is not None else '',
-                device_name.replace(' ', '')
-            )
-        else:
-            full_name = '%s_%s_%s_%s' % (
-                parent.item_base, device_collection, class_name,
-                device_name.replace(' ', '')
-            )
+        full_name = item_base(
+            device_collection,
+            class_name,
+            room_name,
+            device_name,
+            parent=parent
+        )
 
         if full_name in self.__cached_devices:
             return self.__cached_devices[full_name]

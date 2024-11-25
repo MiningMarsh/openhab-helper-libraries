@@ -73,6 +73,9 @@ def Light(device):
         h, s, b = controls.value
 
         min_brightness = 0.5 if sleeping.value else 0.15
+        if not away.value and automatic_brightness_mode.value and device.room_name in {'Bathroom'}:
+            min_brightness = 0.33
+
         brightness = (
             min_brightness + ((1 - min_brightness) * automatic_brightness.value)
             if automatic_brightness_mode.value
@@ -91,13 +94,8 @@ def Light(device):
             device.room_name != 'Closet'
         )
         
-        if automatic_brightness_mode.value and power and brightness == 0:
-            brightness = automatic_brightness.value
-        elif automatic_brightness_mode.value and not power:
-            brightness = 0
-
-        if not away.value and automatic_brightness_mode.value and device.room_name in {'Bathroom'}:
-            brightness = max(0.33, brightness)
+        if automatic_brightness_mode.value:
+            brightness = automatic_brightness.value if power else 0
 
         if automatic_color_temperature_mode.value:
             if brightness > 0:

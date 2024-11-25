@@ -15,6 +15,20 @@ from uuid import uuid4
 _RE_CAMEL = re.compile('^(.*[a-z])([A-Z].*)$')
 
 
+def item_base(collection_name, class_name, room_name, device_name, parent=None):
+    if parent is None:
+        return 'MMDEV_%s_%s_%s_%s' % (
+            collection_name, class_name,
+            room_name.replace(' ', '') if room_name is not None else '',
+            device_name.replace(' ', '')
+        )
+
+    return '%s_%s_%s_%s' % (
+        parent.item_base, collection_name, class_name,
+        device_name.replace(' ', '')
+    )
+
+
 def details(function):
     
     parent = getmodule(function)
@@ -78,11 +92,9 @@ class Device(object):
     def item_base(self):
         if self.__item_base is not None:
             return self.__item_base
-        return 'MMDEV_%s_%s_%s_%s' % (
-            self.device_collection,
-            self.class_name,
-            self.room_name.replace(' ', '') if self.room_name is not None else '',
-            self.device_name.replace(' ', '')
+
+        return item_base(
+            collection_name, class_name, room_name, device_name
         )
 
     def property_item(self, property_name):
@@ -158,9 +170,14 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
                 self.__manager = manager
                 self.__parent = device
 
-            def device_for(self, *args, **kwargs):
-                kwargs['parent'] = self.__parent
-                return self.__manager.device_for(*args, **kwargs)
+            def device_for(self, device_class, device_name=None, **kwargs):
+                if 'parent' not in kwargs:
+                    kwargs['parent'] = self.__parent
+                if 'room_name' not in kwargs:
+                    kwargs['room_name'] = self.__parent.room_name
+                return self.__manager.device_for(
+                    device_class, device_ne=device_name, **kwargs
+                )
 
             def state_for(self, *args, **kwargs):
                 kwargs['parent'] = self.__parent
@@ -186,7 +203,6 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
             name=device_name
 
             def __init__(self, function):
-                self.__attribs = None
                 self.__function = function
 
             def __params(self, postfix, kwargs):

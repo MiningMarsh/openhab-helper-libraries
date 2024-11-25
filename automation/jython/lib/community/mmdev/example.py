@@ -142,6 +142,7 @@ lights = {
 
 @log_traceback
 def remote_event(room, name, dev, detector, event):
+    LOGGER.error('Called: %s' % event)
     desc = str(event)
     event = int(float(desc.split(' ')[-1]))
     dev = m.device_for(Light, room, name)
@@ -166,7 +167,7 @@ def remote_event(room, name, dev, detector, event):
 
 @log_traceback
 def binder(channel, room, name, dev, detector):
-    rules.rule('Channel "%s" triggered' % channel, pass_context=True)(lambda event: remote_event(room, name, dev, event, detector))
+    rules.rule('Channel "%s" triggered' % channel, pass_context=True)(lambda event: remote_event(room, name, dev, detector, event))
 
 
 def define(room, name, group, has_motion):
@@ -190,9 +191,10 @@ def define(room, name, group, has_motion):
         motion_detected_proxy=detector and detector.energized
     )
 
-    @automatic_light_management.on_enable
-    def enable_motion_detector():
-        detector.powered.command = True
+    if detector is not None:
+        @automatic_light_management.on_enable
+        def enable_motion_detector():
+            detector.powered.command = True
 
     remote_channel = "hue:0820:primary:dimmers_%s:dimmer_switch_event" % room.lower().replace(' ', '')
     binder(remote_channel, room, name, dev, detector)
@@ -416,12 +418,12 @@ portableac = m.device_for(
 )
 
 
-m.device_for(
-    TimedLatch, 'Hallway', 'Lock',
-    energized_channel='mqtt:topic:front_door_lock:locked',
-    target=True,
-    timeout_default=600
-)
+#m.device_for(
+#    TimedLatch, 'Hallway', 'Lock',
+#    energized_channel='mqtt:topic:front_door_lock:locked',
+#    target=True,
+#    timeout_default=600
+#)
 
 
 fan = m.state_for(
@@ -484,11 +486,11 @@ update_thermostat_fan_mode()
 @as_device(manager=True)
 def TestDevice(device, manager):
     test2 = device.property(int, 'TestProperty', default=0)
-    test = manager.device_for(Light, device_name='TestLight')
+    test = manager.device_for(Light, 'TestLight')
     return {
         test
     }
 
 
-tester = m.device_for(TestDevice, 'Test Room', 'Tester', manager=m)
-LOGGER.error('Tester.test -> %s' % str(tester.test_light))
+tester = m.device_for(TestDevice, 'Test Room', 'Tester2', manager=m)
+LOGGER.error('tester.test_light -> %s' % str(tester.test_light))
