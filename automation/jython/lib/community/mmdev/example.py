@@ -19,12 +19,14 @@ m = Manager()
 
 tvoc = m.state_for(
     int, 'TVOC', default=0,
-    metadata={'ga': ('Sensor', {
-        'name': 'Total VOC',
-        'roomHint': 'Bedroom',
-        'sensorName': 'VolatileOrganicCompounds',
-        'valueUnit': 'PARTS_PER_MILLION'
-    })},
+    metadata={
+        'ga': ('Sensor', {
+            'name': 'Total VOC',
+            'roomHint': 'Bedroom',
+            'sensorName': 'VolatileOrganicCompounds',
+            'valueUnit': 'PARTS_PER_MILLION'
+        })
+    },
     channel='mqtt:topic:sensor_station:tvoc'
 )
 
@@ -58,20 +60,24 @@ def scene(name_on, name_off, default=None, channel_on=None, channel_off=None):
         bool, 'Scene' + name_off.replace(' ', ''), 
         default=not default,
         channel=channel_off,
-        metadata={'ga': ('Scene', {
-            'name': name_off,
-            'roomHint': 'OpenHAB',
-        })}
+        metadata={
+            'ga': ('Scene', {
+                'name': name_off,
+               'roomHint': 'OpenHAB'
+            })
+        }
     )
 
     on = m.state_for(
         bool, 'Scene' + name_on.replace(' ', ''), 
         default=default,
         channel=channel_on,
-        metadata={'ga': ('Scene', {
-            'name': name_on, 
-            'roomHint': 'OpenHAB',
-        })}
+        metadata={
+            'ga': ('Scene', {
+                'name': name_on, 
+                'roomHint': 'OpenHAB'
+            })
+        }
     )
 
     @on.on_enable
@@ -87,10 +93,12 @@ def scene(name_on, name_off, default=None, channel_on=None, channel_off=None):
 def control(name, default):
     return m.state_for(
         bool, 'Control' + name.replace(' ', ''), default=default,
-        metadata={'ga': ('Switch', {
-            'name': name,
-            'roomHint': 'Controls'
-        })}
+        metadata={
+            'ga': ('Switch', {
+                'name': name,
+                'roomHint': 'Controls'
+            })
+        }
     )
 
 
@@ -140,37 +148,8 @@ lights = {
     ('Closet', 'Light', True, False)
 }
 
-@log_traceback
-def remote_event(room, name, dev, detector, event):
-    LOGGER.error('Called: %s' % event)
-    desc = str(event)
-    event = int(float(desc.split(' ')[-1]))
-    dev = m.device_for(Light, room, name)
-    LOGGER.error('Remote handler: %s, %s, %s' % (room, str(dev), str(event)))
-    if 1002 == event:
-        dev.controls.command = 1
-    elif 1003 == event:
-        detector.powered.command = True
-    elif 2002 == event:
-        dev.controls.command = max(0, min(1, dev.controls.value[2] + 0.1))
-    elif 2003 == event:
-        dev.controls.command = 1
-    elif 3002 == event:
-        dev.controls.command = max(0, min(1, dev.controls.value[2] - 0.1))
-    elif 3003 == event:
-        dev.controls.command = 0.05
-    elif 4002 == event:
-        dev.controls.command = False
-    elif 4003 == event:
-        detector.powered.command = False
 
-
-@log_traceback
-def binder(channel, room, name, dev, detector):
-    rules.rule('Channel "%s" triggered' % channel, pass_context=True)(lambda event: remote_event(room, name, dev, detector, event))
-
-
-def define(room, name, group, has_motion):
+for room, name, group, has_motion in lights:
     if has_motion:
         detector = m.device_for(
             TimedLatch, room, 'Motion Detector', target=True,
@@ -197,23 +176,45 @@ def define(room, name, group, has_motion):
             detector.powered.command = True
 
     remote_channel = "hue:0820:primary:dimmers_%s:dimmer_switch_event" % room.lower().replace(' ', '')
-    binder(remote_channel, room, name, dev, detector)
 
-
-for room, name, group, has_motion in lights:
-    define(room, name, group, has_motion)
+    @rules.on_trigger(remote_channel, pass_context=True)
+    def remote_event(event):
+        LOGGER.error('Called: %s' % event)
+        LOGGER.error('DIR: %s' % str(dir(event)))
+        desc = str(event)
+        event = int(float(desc.split(' ')[-1]))
+        dev = m.device_for(Light, room, name)
+        LOGGER.error('Remote handler: %s, %s, %s' % (room, str(dev), str(event)))
+        if 1002 == event:
+            dev.controls.command = 1
+        elif 1003 == event:
+            detector.powered.command = True
+        elif 2002 == event:
+            dev.controls.command = max(0, min(1, dev.controls.value[2] + 0.1))
+        elif 2003 == event:
+            dev.controls.command = 1
+        elif 3002 == event:
+            dev.controls.command = max(0, min(1, dev.controls.value[2] - 0.1))
+        elif 3003 == event:
+            dev.controls.command = 0.05
+        elif 4002 == event:
+            dev.controls.command = False
+        elif 4003 == event:
+            detector.powered.command = False
 
 
 def purifier(room_name, device_name):
     purifier_group = m.group_for(
         room_name.replace(' ', '') + 'AirPurifier' + device_name.replace(' ', ''),
-        metadata={'ga': ('AirPurifier', {
-            'lang': 'en',
-            'name': device_name,
-            'roomHint': room_name,
-            'fanModeName': 'Control Mode',
-            'fanModeSettings': 'Automatic=Automatic,Manual=Manual'
-        })}
+        metadata={
+            'ga': ('AirPurifier', {
+                'lang': 'en',
+                'name': device_name,
+                'roomHint': room_name,
+                'fanModeName': 'Control Mode',
+                'fanModeSettings': 'Automatic=Automatic,Manual=Manual'
+            })
+        }
     )
 
     p = m.device_for(
@@ -244,13 +245,15 @@ bedroom_purifier = purifier('Bedroom', 'Smart Purifier')
 
 dumbpurifier_group = m.group_for(
     'BedroomPurifier',
-    metadata={'ga': ('AirPurifier', {
-        'lang': 'en',
-        'name': 'Air Purifier',
-        'roomHint': 'Bedroom',
-        'fanModeName': 'Control Mode',
-        'fanModeSettings': 'Automatic=Automatic,Manual=Manual',
-    })}
+    metadata={
+        'ga': ('AirPurifier', {
+            'lang': 'en',
+            'name': 'Air Purifier',
+            'roomHint': 'Bedroom',
+            'fanModeName': 'Control Mode',
+            'fanModeSettings': 'Automatic=Automatic,Manual=Manual',
+        })
+    }
 )
 
 
@@ -345,11 +348,13 @@ bedroom_temp = m.state_for(
     int, "BedroomTemperature", default=0,
     channel='mqtt:topic:closet_sensors:temperature',
     dimension='Temperature',
-    metadata={'ga': ('TemperatureSensor', {
-        'name': 'Bedroom Temperature',
-        'roomHint': 'Bedroom',
-        'useFahrenheit': True
-    })}
+    metadata={
+        'ga': ('TemperatureSensor', {
+            'name': 'Bedroom Temperature',
+            'roomHint': 'Bedroom',
+            'useFahrenheit': True
+        })
+    }
 )
 
 
@@ -357,23 +362,38 @@ bathroom_temp = m.state_for(
     int, "BathroomTemperature", default=0,
     channel='hue:0302:primary:temperaturesensors_bathroom:temperature',
     dimension='Temperature',
-    metadata={'ga': ('TemperatureSensor', {
-        'name': 'Bathroom Temperature',
-        'roomHint': 'Bathroom',
-        'useFahrenheit': True
-    })}
+    metadata={
+        'ga': ('TemperatureSensor', {
+            'name': 'Bathroom Temperature',
+            'roomHint': 'Bathroom',
+            'useFahrenheit': True
+        })
+    }
 )
+
+
+bathroom_rugheater = m.state_for(
+    bool, 'BathroomRugHeater', default=True,
+    channel='tplinksmarthome:hs103:outlet_rugheater:switch'
+)
+
+
+@bathroom_temp.on_change(pass_context=True)
+def rugheater_update(_, temp):
+    bathroom_rugheater.command = temp < 75
 
 
 hallway_temp = m.state_for(
     int, "HallwayTemperature", default=0,
     channel='hue:0302:primary:temperaturesensors_hallway:temperature',
     dimension='Temperature',
-    metadata={'ga': ('TemperatureSensor', {
-        'name': 'Hallway Temperature',
-        'roomHint': 'Bathroom',
-        'useFahrenheit': True
-    })}
+    metadata={
+        'ga': ('TemperatureSensor', {
+            'name': 'Hallway Temperature',
+            'roomHint': 'Bathroom',
+            'useFahrenheit': True
+        })
+    }
 )
 
 

@@ -106,12 +106,14 @@ def on_update(item, pass_context=False, null_context=False):
     return decorator
 
 
-def on_trigger(channel, value, pass_context=False, null_context=False):
+def on_trigger(channel, value=None, pass_context=False, null_context=False):
+    trigger = (
+        'Channel "%s" triggered %s' % (channel, value) 
+        if value is not None else
+        'Channel "%s" triggered' % channel 
+    )
     def decorator(function):
-        @rule(
-            'Channel "%s" triggered %s' % (channel, value),
-            pass_context=True
-        )
+        @rule(trigger, pass_context=True)
         @wraps(function)
         def wrapper(event):
             if not pass_context:

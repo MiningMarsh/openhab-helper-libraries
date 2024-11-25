@@ -108,5 +108,5 @@ class RuleEngine(object):
         return decorator
 
 
-    def on_trigger(self, channel, trigger):
-        return rules.on_trigger(channel, trigger)
+    def on_trigger(self, *args, **kwargs):
+        return rules.on_trigger(*args, **kwargs)

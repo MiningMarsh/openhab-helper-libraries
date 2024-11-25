@@ -136,23 +136,6 @@ class Device(object):
         )
 
 
-# For some reason, if I dont wrap this inbthis eztra class, the d3vice object is gettibg reused.
-class DeviceAttribWrapper(object):
-
-    def __init__(self, device, attribs):
-        self.__device = device
-        self.__attribs = {}
-        for attrib, value in attribs.items():
-            self.__attribs[attrib] = value
-
-        self.__attribs['device'] = device
-
-    def __getattr__(self, name):
-        if self.__attribs is not None:
-            if name in self.__attribs:
-                return self.__attribs[name]
-        raise AttributeError
-
 def as_device(collection=None, name=None, ephemeral=False, manager=False):
     if ephemeral:
         collection = 'Ephemeral'
@@ -163,6 +146,22 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
             device_collection = collection
         if name is not None:
             device_name = name
+
+        class DeviceAttribWrapper(object):
+
+            def __init__(self, device, attribs):
+                self.__device = device
+                self.__attribs = {}
+                for attrib, value in attribs.items():
+                    self.__attribs[attrib] = value
+
+                self.__attribs['device'] = device
+
+            def __getattr__(self, name):
+                if self.__attribs is not None:
+                    if name in self.__attribs:
+                        return self.__attribs[name]
+                raise AttributeError
 
         class DeviceManagerWrapper(object):
             
@@ -244,49 +243,48 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
 
 
         class DevicePropertyWrapper(object):
-                
-                @log_traceback
-                def __init__(self, device, params):
-                    self.__device = device
-                    self.__params = params
-                    self.__declared = set()
+            
+            def __init__(self, device, params):
+                self.__device = device
+                self.__params = params
+                self.__declared = set()
 
-                @log_traceback
-                def property(self, property_type, property_name, **kwargs):
-                    if property_name in self.__declared:
-                        raise Exception('Property `{}` declared twice!'.format(property_name))
-                    self.__declared.add(property_name)
+            @log_traceback
+            def property(self, property_type, property_name, **kwargs):
+                if property_name in self.__declared:
+                    raise Exception('Property `{}` declared twice!'.format(property_name))
+                self.__declared.add(property_name)
 
-                    item_name = self.__device.property_item(property_name)
-                    camel_name = translate_camel(property_name)
-                    for section, config in self.__params.items():
-                        if camel_name in config:
-                            if section == 'groups':
-                                if section not in kwargs:
-                                    kwargs[section] = config[camel_name]
-                                else:
-                                    new = set()
-                                    for item in config[camel_name]:
-                                        new.add(item)
-                                    for item in groups:
-                                        new.add(item)
-                                    kwargs[section] = new
-                            else:
+                item_name = self.__device.property_item(property_name)
+                camel_name = translate_camel(property_name)
+                for section, config in self.__params.items():
+                    if camel_name in config:
+                        if section == 'groups':
+                            if section not in kwargs:
                                 kwargs[section] = config[camel_name]
-                            del config[camel_name]
-                    
-                    return prop.Prop(
-                        property_type, item_name,
-                        property_name=property_name,
-                        rule_engine=self.__device.rule_engine, 
-                        **kwargs
-                    )
+                            else:
+                                new = set()
+                                for item in config[camel_name]:
+                                    new.add(item)
+                                for item in groups:
+                                    new.add(item)
+                                kwargs[section] = new
+                        else:
+                            kwargs[section] = config[camel_name]
+                        del config[camel_name]
+                
+                return prop.Prop(
+                    property_type, item_name,
+                    property_name=property_name,
+                    rule_engine=self.__device.rule_engine, 
+                    **kwargs
+                )
 
-                def __getattr__(self, attr):
-                    if hasattr(self.__device, attr):
-                        return getattr(self.__device, attr)
+            def __getattr__(self, attr):
+                if hasattr(self.__device, attr):
+                    return getattr(self.__device, attr)
 
-                    raise AttributeError()
+                raise AttributeError()
 
         return DeviceClassWrapper(function)
     return decorator
