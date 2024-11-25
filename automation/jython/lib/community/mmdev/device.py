@@ -176,7 +176,7 @@ def as_device(collection=None, name=None, ephemeral=False, manager=False):
                 if 'room_name' not in kwargs:
                     kwargs['room_name'] = self.__parent.room_name
                 return self.__manager.device_for(
-                    device_class, device_ne=device_name, **kwargs
+                    device_class, device_name=device_name, **kwargs
                 )
 
             def state_for(self, *args, **kwargs):
