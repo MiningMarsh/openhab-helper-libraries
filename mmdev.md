@@ -326,9 +326,9 @@ proxy = device.property(int, 'Proxy', proxy=test)
 
 ## Groups
 
-Groups are set type properties with no associated device.
+Groups are `set` type properties with no associated device.
 
-Groups can be created either with either the device object's, or device manager object's, `group_for` method. Both accept a metadata parameter for the group's metadata.
+Groups can be created with either the device object's, or device manager object's, `group_for` method. Both accept a metadata parameter for the group's metadata.
 
 ```python2
 m = Manager()
