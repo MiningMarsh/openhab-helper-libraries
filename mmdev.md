@@ -58,6 +58,8 @@ fan = m.device_for(
     room_name='Study',
     energized_channel='tplinksmarthome:hs300:powerstrip_ac:outlet2#switch',
     monitor_proxy=temperature,
+
+    # This metadata exposes the energized property over the Google home OpenHAB plugin.
     energized_metadata={'ga': ('Fan', {
         "lang": "en",
         "roomHint" "Living Room",
@@ -84,25 +86,23 @@ Place extra community libraries in `automation/jython/lib/community`.
 
 ## Object Modelling
 
-OpenHAB has native to it the concept of items, indivual values that can be tied
+OpenHAB uses the abstraction of items, indivual values that can be tied
 to a channel. `mmdev` treats collections of these items as objects akin to real
 world devices. For example, a `fan` device might have a `power` and `speed` item
-associated with it that represents the power and speed of a real fan. `mmdev` refers to these objects as devices.
+associated with it that represents the power and speed of a real fan. `mmdev` refers to these as devices.
 
-Devices are designed to allow you to declare a group of behaviors for a set of real world devices exactly once. You can then instantiate multiple devices using that declared behavior, generating items for each.
+Devices are designed to allow you to declare a group of behaviors for a set of real world devices exactly once. You can then instantiate multiple device objects using that declared behavior, generating items for each.
 
 Devices are defined as python classes that describe the items they use and the 
-rules they have between them. `mmdev` refers to its equivalent of items as 
-device properties.
+rules they have between them. `mmdev` exposes information about these items as attributes on device objects referred to as device properties.
 
 Devices have a room and a name associated with them. Two devices with the same 
-type, name, and room should not be created, as this could lead to erratic 
-behavior with the items backing the device properties.
+type, name, and room should not be created, as this could lead to duplicate underlying item names.
 
 ### Devices
 
 Devices are represented by objects in python. Publicly available properties are
-exposed as attributes on those objects.
+exposed as attributes on those objects. Properties expose an interface to a corresponding OpenHAB item.
 
 A device property is used the same way both when defining a device class or 
 accessing the fields on a device object. They can be used to change or query 
@@ -119,14 +119,14 @@ The collection of a device can either be provided with the device definition, or
 
 Auto detection works as follows:
 
-The grandparent of the current module is imported. If it imports successfully, and has a field 'collection' on it, that field is used. Otherwise, the name of the module is used as the collection. If the grandparent cannot be imported, it instead imports the parent and repeats the same process.
+The grandparent of the current module is imported. If it imports successfully, and has an attribute 'collection' on it, that atteibute is used. Otherwise, the name of the module is used as the collection. If the grandparent cannot be imported, it instead imports the parent and repeats the same process.
 
 A device name is discovered based on the function name given during device definition.
 
 ### Properties
 
 Properties wrap a single item each. Once a property is defined, `mmdev` will
-begin to maintain the item backing it transparently whenever a new device is instantiated..
+begin to maintain the item backing it transparently whenever a new device is instantiated.
 
 #### Property Items
 
@@ -152,13 +152,14 @@ LOGGER.info(device.property_item('property_name'))
 Properties do not provide or accept raw OpenHAB typed values. Instead, `mmdev` translates openhab typed values to python typed values and vice-versa, transparently.
 
 OpenHAB Types are directly translated to corresponding python types:
-    - `DecimalType` values use the `int` type.
-    - `OnOffType` values use the `bool` type.
-    - `PercentType` values use the `float` type and should be a normalized value.
-    - `HSBType` values use the `tuple` type, specifically a tuple of the form `(h, s, b)`.
-    - `String` values use the `str` type.
-    - `Group` values use the `set` type.
-    - `Undefined` openhab values translate to `None`, and vice versa.
+
+- `DecimalType` values use the `int` type.
+- `OnOffType` values use the `bool` type.
+- `PercentType` values use the `float` type and should be a normalized value.
+- `HSBType` values use the `tuple` type, specifically a tuple of the form `(h, s, b)`.
+- `String` values use the `str` type.
+- `Group` values use the `set` type.
+- `Undefined` openhab values translate to `None`, and vice versa.
 
 Numeric values can have a dimension added with the `dimension` parameter in the property constructor. An example dimension would be 'Temperature'.
 
