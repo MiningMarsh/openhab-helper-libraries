@@ -14,6 +14,7 @@ from . import types
 from functools import wraps
 from uuid import uuid4
 import traceback
+import json
 
 
 LOGGER = getLogger('mmdev.rules')
@@ -106,7 +107,7 @@ def on_update(item, pass_context=False, null_context=False):
     return decorator
 
 
-def on_trigger(channel, value=None, pass_context=False, null_context=False):
+def on_trigger(channel, value=None, pass_context=False):
     trigger = (
         'Channel "%s" triggered %s' % (channel, value) 
         if value is not None else
@@ -116,10 +117,12 @@ def on_trigger(channel, value=None, pass_context=False, null_context=False):
         @rule(trigger, pass_context=True)
         @wraps(function)
         def wrapper(event):
-            if not pass_context:
-                return function()
-            value = types.from_type(event.itemState)
-            if null_context or value is not None:
-                return function(value)
+            if pass_context:
+                payload = json.loads(event.payload)
+                return function(
+                    payload["channel"], 
+                    payload["event"]
+                )
+            return function()
         return function
     return decorator

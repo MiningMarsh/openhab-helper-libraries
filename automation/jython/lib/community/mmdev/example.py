@@ -149,13 +149,14 @@ lights = {
 }
 
 
-for room, name, group, has_motion in lights:
+def light(room, name, group, has_motion):
     if has_motion:
-        detector = m.device_for(
-            TimedLatch, room, 'Motion Detector', target=True,
-            energized_channel="hue:0107:primary:motionsensors_" + room.replace(' ', '').lower() + ":presence",
-            timeout_default=300
-        )
+        #detector = m.device_for(
+        #    TimedLatch, room, 'Motion Detector', target=True,
+        #    energized_channel="hue:0107:primary:motionsensors_" + room.replace(' ', '').lower() + ":presence",
+        #    timeout_default=300
+        #)
+        detector = None
     else:
         detector = None
     dev = m.device_for(
@@ -165,9 +166,19 @@ for room, name, group, has_motion in lights:
         automatic_color_temperature_proxy=automatic_color_temperature,
         automatic_mode_proxy=automatic_light_management,
         away_proxy=away,
-        color_channel="hue:" + ('group' if group else '0210') + ":primary:bulbs_" + (room.replace(' ', '').lower() if group else room.lower().replace(' ', '') + '_' + name.lower()) + ":color",
         dog_mode_proxy=dog_home,
-        motion_detected_proxy=detector and detector.energized
+        motion_detected_proxy=detector and detector.energized,
+        color_channel=(
+            "hue:" 
+            + ('group' if group else '0210') 
+            + ":primary:bulbs_" 
+            + (
+                room.replace(' ', '').lower() 
+                if group else 
+                room.lower().replace(' ', '') + '_' + name.lower()
+            ) 
+            + ":color"
+        )
     )
 
     if detector is not None:
@@ -178,29 +189,24 @@ for room, name, group, has_motion in lights:
     remote_channel = "hue:0820:primary:dimmers_%s:dimmer_switch_event" % room.lower().replace(' ', '')
 
     @rules.on_trigger(remote_channel, pass_context=True)
-    def remote_event(event):
-        LOGGER.error('Called: %s' % event)
-        LOGGER.error('DIR: %s' % str(dir(event)))
-        desc = str(event)
-        event = int(float(desc.split(' ')[-1]))
-        dev = m.device_for(Light, room, name)
-        LOGGER.error('Remote handler: %s, %s, %s' % (room, str(dev), str(event)))
+    def remote_event(channel, event):
+        event = int(float(event))
         if 1002 == event:
-            dev.controls.command = 1
-        elif 1003 == event:
-            detector.powered.command = True
+            dev.controls.command = True
         elif 2002 == event:
-            dev.controls.command = max(0, min(1, dev.controls.value[2] + 0.1))
+            dev.controls.command = max(0, min(1, dev.controls.value[2] + 0.2))
         elif 2003 == event:
             dev.controls.command = 1
         elif 3002 == event:
-            dev.controls.command = max(0, min(1, dev.controls.value[2] - 0.1))
+            dev.controls.command = max(0.05, min(1, dev.controls.value[2] - 0.2))
         elif 3003 == event:
             dev.controls.command = 0.05
         elif 4002 == event:
             dev.controls.command = False
-        elif 4003 == event:
-            detector.powered.command = False
+
+
+for room, name, group, has_motion in lights:
+    light(room, name, group, has_motion)
 
 
 def purifier(room_name, device_name):
@@ -262,7 +268,8 @@ dumbpurifier = m.device_for(
     controls_groups={dumbpurifier_group},
     controls_metadata={'ga': ('fanPower', {})},
     mode_groups={dumbpurifier_group},
-    mode_metadata={'ga': ('fanMode', {})}
+    mode_metadata={'ga': ('fanMode', {})},
+    energized_channel='tplinksmarthome:hs103:outlet_dumbpurifier:switch'
 )
 
 
@@ -316,12 +323,12 @@ bedroom_humidifier = m.state_for(
 
 @closet_humidity.on_change(pass_context=True)
 def update_bedroom_humidifier(_, new):
-    bedroom_humidifier.command = new < 0.45
+    bedroom_humidifier.command = new < 0.5
 
 
 @thermostat.humidity.on_change(pass_context=True)
 def update_livingroom_humidifier(_, new):
-    livingroom_humidifier.command = new < 0.45
+    livingroom_humidifier.command = new < 0.5
 
 
 humidity_regulator = m.device_for(
@@ -338,8 +345,8 @@ dehumidifier = m.device_for(
     cooldown_period_default=300,
     duty_period_default=300,
     powered_default=True,
-    setpoint_proxy=humidity_regulator.setpoint_high,
-    monitor_channel='mqtt:topic:closet_sensors:humidity',
+    setpoint_default=0.5,
+    monitor_proxy=thermostat.humidity,
     energized_channel='tplinksmarthome:hs103:outlet_dehumidifier:switch'
 )
 
@@ -353,6 +360,19 @@ bedroom_temp = m.state_for(
             'name': 'Bedroom Temperature',
             'roomHint': 'Bedroom',
             'useFahrenheit': True
+        })
+    }
+)
+
+
+bedroom_humidity = m.state_for(
+    float, 'BedroomHumidity', default=0.5,
+    channel='mqtt:topic:closet_sensors:humidity',
+    dimension='Humidity',
+    metadata={
+        'ga': ('HumiditySensor', {
+            'name': 'Bedroom Humidity',
+            'roomHint': 'Bedroom'
         })
     }
 )
@@ -417,11 +437,11 @@ def PortableAC(device):
         if time.time() - last_transition.value < 30 * 60:
             return
 
-        if 'Cool' not in thermostat.operation_mode.value:
+        if 'cool' not in thermostat.operation_mode.value.lower():
             energized.command = False
             return
 
-        energized.command = bedroom_temp.value > thermostat.operation_setpoint_high.value + 0.5
+        energized.command = bedroom_temp.value > thermostat.operation_setpoint_high.value
 
     return {
         energized,
@@ -438,12 +458,20 @@ portableac = m.device_for(
 )
 
 
-#m.device_for(
-#    TimedLatch, 'Hallway', 'Lock',
-#    energized_channel='mqtt:topic:front_door_lock:locked',
-#    target=True,
-#    timeout_default=600
-#)
+m.device_for(
+    TimedLatch, 'Hallway', 'Lock',
+    energized_channel='mqtt:topic:front_door_lock:locked',
+    monitor_channel='mqtt:topic:front_door_lock:locked',
+    powered_default=True,
+    latched=False,
+    timeout_default=600,
+    energized_metadata={
+        'ga': ('Lock', {
+            'name': 'Front Door Lock',
+            'roomHint': 'Hallway'
+        })
+    }
+)
 
 
 fan = m.state_for(
@@ -456,61 +484,37 @@ fan = m.state_for(
 @thermostat.operation_setpoint_high.on_change()
 @thermostat.temperature.on_change()
 @thermostat.humidity.on_change()
-@dehumidifier.monitor.on_change()
-def update_devices():
+@bedroom_humidity.on_change()
+def update_dehumidifier():
     dehumidifier.powered.command = (not (
         'Cool' in thermostat.operation_mode.value
-        and thermostat.temperature.value > thermostat.operation_setpoint_high.value + 2.0
-    )) or (
-        thermostat.humidity.value > 0.70
+        and thermostat.temperature.value >= thermostat.operation_setpoint_high.value + 2.0
+    )) and ((
+        thermostat.humidity.value > 0.60
     ) or (
-        dehumidifier.monitor.value > 0.70
-    )
+        bedroom_humidity.value > 0.60
+    ))
 
-
-update_devices()
+update_dehumidifier()
 
 
 @dehumidifier.energized.on_change()
 @portableac.energized.on_change()
 @sleeping.on_change()
 def update_fan():
-    fan.command = sleeping.value and (
+    fan.command = (sleeping.value and (
         portableac.energized.value 
         or dehumidifier.energized.value
+    )) or (
+        portableac.energized.value and ((
+            bedroom_temp.value < thermostat.operation_setpoint_high.value
+            and thermostat.temperature.value > thermostat.operation_setpoint_high.value
+        ) or (
+            bedroom_temp.value > thermostat.operation_setpoint_high.value + 5.0
+        ))
     )
 
 update_fan()
 
 
-@bedroom_temp.on_change()
-@dehumidifier.energized.on_change()
-@dehumidifier.monitor.on_change()
-@portableac.energized.on_change()
-@thermostat.humidity.on_change()
-@thermostat.temperature.on_change()
-def update_thermostat_fan_mode():
-    thermostat.controls_fan_mode.command = (
-        'Circulate' if (
-            dehumidifier.energized.value 
-            or portableac.energized.value
-            or 1.5 < abs(bedroom_temp.value - thermostat.temperature.value)
-            or 0.05 < abs(thermostat.humidity.value - dehumidifier.monitor.value)
-        ) else 'Auto'
-    )
-
-
-update_thermostat_fan_mode()
-
-
-@as_device(manager=True)
-def TestDevice(device, manager):
-    test2 = device.property(int, 'TestProperty', default=0)
-    test = manager.device_for(Light, 'TestLight')
-    return {
-        test
-    }
-
-
-tester = m.device_for(TestDevice, 'Test Room', 'Tester2', manager=m)
-LOGGER.error('tester.test_light -> %s' % str(tester.test_light))
+thermostat.controls_fan_mode.command = 'Auto'

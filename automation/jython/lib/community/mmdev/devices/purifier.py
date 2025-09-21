@@ -67,7 +67,7 @@ def Purifier(device):
             fan_speed.command = controls.value
             return
 
-        if sleeping.value:
+        if sleeping.value and fan_mode.value.lower() != 'manual':
             speed = 0.5
 
         if speed < 0.05:

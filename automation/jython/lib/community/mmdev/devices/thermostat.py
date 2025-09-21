@@ -15,8 +15,8 @@ _MODES={
 _FAN_MODES={
     'auto': 0,
     'on': 1,
+    'circulate': 6
     #'circulate': 6
-    'circulate': 0
 }
 
 def mode_translate(mode_num, mode_defs):
@@ -47,18 +47,11 @@ def Thermostat(device):
     controls_fan_mode = device.property(str, 'ControlsFanMode', default='auto')
 
     humidity = device.property(
-        float, 'Humidity', default=0.5
-    )
-
-    humidity_ga = device.property(
-        int, 'HumidityGA', default=50,
+        float, 'Humidity', default=0.5,
         groups={group},
-        metadata={'ga': ('thermostatHumidityAmbient', {})}
+        metadata={'ga': ('thermostatHumidityAmbient', {})},
+        normalize=True
     )
-
-    @humidity.on_change(pass_context=True)
-    def humidity_change(_, new):
-        humidity_ga.command = new * 100.0
 
     temperature = device.property(
         int, 'Temperature', default=0,
@@ -91,6 +84,13 @@ def Thermostat(device):
         metadata={'ga': ('thermostatTemperatureSetpointHigh', {})}
     )
 
+    controls_setpoint = device.property(
+        int, 'ControlsSetpoint', default=70.0,
+        groups=[group],
+        dimension='Temperature',
+        metadata={'ga': ('thermostatTemperatureSetpoint', {})}
+    )
+
     setpoint_low = device.property(
         int, 'SetpointLow', default=68.0,
         dimension='Temperature',
@@ -115,13 +115,13 @@ def Thermostat(device):
     @temperature.on_change()
     @device.rule_engine.loop
     def update():
-        setpoint_low.command = operation_setpoint_low.value
-        if operation_setpoint_low.value >= operation_setpoint_high.value:
-            setpoint_high.command = operation_setpoint_low.value
-        else:
-            setpoint_high.command = operation_setpoint_high.value
+        if 'heatcool' == operation_mode.value.lower():
+            setpoint_low.command = operation_setpoint_low.value
+            if operation_setpoint_low.value >= operation_setpoint_high.value:
+                setpoint_high.command = operation_setpoint_low.value
+            else:
+                setpoint_high.command = operation_setpoint_high.value
 
-        if operation_mode.value == 'HeatCool':
             if temperature.value >= operation_setpoint_high.value + 1.5:
                 mode.command = _MODES['Cool']
             elif temperature.value <= operation_setpoint_low.value - 1.5:
@@ -129,6 +129,8 @@ def Thermostat(device):
             else: 
                 mode.command = _MODES['HeatCool']
         else:
+            setpoint_low.command = operation_setpoint_low.value
+            setpoint_high.command = operation_setpoint_high.value
             mode.command = _MODES[operation_mode.value]
 
     @operation_mode.on_change()
@@ -136,7 +138,7 @@ def Thermostat(device):
     @temperature.on_change()
     def update_overheat():
         overheat.command = bool(
-            'Cool' in operation_mode.value
+            'cool' in operation_mode.value.lower()
             and temperature.value > operation_setpoint_high.value + 1.0
         )
 
@@ -145,16 +147,16 @@ def Thermostat(device):
     @temperature.on_change()
     def update_overcool():
         overcool.command = bool(
-            'Heat' in operation_mode.value
+            'heat' in operation_mode.value.lower()
             and temperature.value < operation_setpoint_low.value - 1.0
         )
 
-
     @away.on_change()
-    @controls_mode.on_change()
     @dog_mode.on_change()
-    @mode.on_change()
     @sleeping.on_change()
+    @controls_setpoint_low.on_change()
+    @controls_setpoint.on_change()
+    @controls_setpoint_high.on_change()
     def operation_update():
         if controls_mode.value.lower() == 'automatic':
             controls_setpoint_low.update = operation_setpoint_low.value
@@ -174,13 +176,13 @@ def Thermostat(device):
                     if temperature.value < 70 
                     else 'AwayCool'
                 )
-                operation_setpoint_low.command = 60
+                operation_setpoint_low.command = 65
                 operation_setpoint_high.command = 80
 
             elif sleeping.value:
                 operation_mode.command = 'HeatCool'
-                operation_setpoint_low.command = 60
-                operation_setpoint_high.command = 60
+                operation_setpoint_low.command = 65
+                operation_setpoint_high.command = 65
             
             else:
                 operation_mode.command = 'HeatCool'
@@ -188,21 +190,37 @@ def Thermostat(device):
                 operation_setpoint_high.command = 72
         else:
             operation_mode.command = controls_mode.value
-            operation_setpoint_low.command = controls_setpoint_low.value
-            operation_setpoint_high.command = controls_setpoint_high.value
+            if 'heatcool' == controls_mode.value.lower():
+                operation_setpoint_high.command = controls_setpoint_low.value
+                operation_setpoint_low.command = controls_setpoint_low.value
+            else:
+                operation_setpoint_low.command = controls_setpoint.value
+                operation_setpoint_high.command = controls_setpoint.value
+                
+    @controls_mode.on_change(pass_context=True)
+    def controls_mode_change(old, new):
+        if 'heatcool' == old.lower():
+            controls_setpoint.command = (
+                controls_setpoint_high.value
+                + controls_setpoint_low.value
+            ) / 2.0
+        elif 'heatcool' == new.lower():
+            controls_setpoint_high.command = controls_setpoint.value
+            controls_setpoint_low.command = controls_setpoint.value
+        operation_update()
 
     @controls_fan_mode.on_change(pass_context=True)
     def controls_fan_mode_change(_, value):
         if value.lower() in _FAN_MODES:    
             fan_mode.command = _FAN_MODES[value.lower()]
 
-    operation_mode.command = 'HeatCool'
     operation_update()
     update()
 
     return {
         away,
         controls_mode,
+        controls_setpoint,
         controls_setpoint_high,
         controls_setpoint_low,
         mode,
