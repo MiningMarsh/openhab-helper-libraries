@@ -1,5 +1,0 @@
-**********
-ClickaTell
-**********
-
-.. automodule:: community.clickatell

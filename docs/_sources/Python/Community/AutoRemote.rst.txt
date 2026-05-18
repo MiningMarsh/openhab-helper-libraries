@@ -1,5 +1,0 @@
-**********
-AutoRemote
-**********
-
-.. automodule:: community.autoremote
